@@ -12,9 +12,9 @@ Our Azure Subscription must first have the providers for Azure Container Instanc
 !az provider register -n Microsoft.ContainerInstance
 ```
 
-The leading `!` tells the notebook cell to execute the code on the command line inside the Azure Notebook VM.
+The leading `!` tells the notebook cell to execute the code on the command line inside the Jupyter Notebook's VM.
 
-As before, let's connect to our Workspace (not really needed, as we're still in the same notebook):
+As before, let's import all necessary libraries and connect to our Workspace (we're probably already connected, but better safe than sorry):
 
 ```python
 from azureml.core import Workspace, Experiment, Run
@@ -34,7 +34,7 @@ model = Model(ws, name="keras-tf-mnist-model")
 print(model.name, model.id, model.version, sep = '\t')
 ```
 
-We need to write a short `score.py` script, that Azure ML understands for loading our model and exposing it as a web service:
+We need to write a short `score.py` script, that Azure ML understands for loading our model and exposing it as a web service. This file will be packaged as a Docker container so that we can deploy it to ACI.
 
 ```python
 %%writefile score.py
@@ -60,7 +60,7 @@ def run(raw_data):
     return json.dumps({"prediction": int(np.argmax(y)), "probabilities": y.tolist()})
 ```
 
-We also need to tell Azure ML which dependencies our packaged model has (similar to when we used Azure Batch AI):
+We also need to tell Azure ML which dependencies our packaged model has (similar to when we used Azure Machine Learning Compute):
 
 ```python
 from azureml.core.conda_dependencies import CondaDependencies 
@@ -69,6 +69,7 @@ myenv = CondaDependencies()
 myenv.add_pip_package("pynacl==1.2.1")
 myenv.add_pip_package("keras==2.2.4")
 myenv.add_pip_package("tensorflow==1.11.0")
+myenv.add_pip_package("pillow==5.3.0")
 
 with open("keras-tf-mnist.yml","w") as f:
     f.write(myenv.serialize_to_string())
@@ -80,17 +81,17 @@ Finally, we are able to configure Azure Container Instances and deploy our model
 from azureml.core.webservice import AciWebservice, Webservice
 from azureml.core.image import ContainerImage
 
-aciconfig = AciWebservice.deploy_configuration(cpu_cores=1, 
-                                               memory_gb=1, 
-                                               tags={"data": "MNIST",  "method" : "keras-tf"}, 
-                                               description='Predict MNIST with Keras and TensorFlow')
+aci_config = AciWebservice.deploy_configuration(cpu_cores=1, 
+                                                memory_gb=1, 
+                                                tags={"data": "MNIST",  "method" : "keras-tf"}, 
+                                                description='Predict MNIST with Keras and TensorFlow')
 
 image_config = ContainerImage.image_configuration(execution_script = "score.py", 
                                     runtime = "python", 
                                     conda_file = "keras-tf-mnist.yml")
 
 service = Webservice.deploy_from_model(name = "keras-tf-mnist-service",
-                                       deployment_config = aciconfig,
+                                       deployment_config = aci_config,
                                        models = [model],
                                        image_config = image_config,
                                        workspace = ws)
@@ -98,7 +99,7 @@ service = Webservice.deploy_from_model(name = "keras-tf-mnist-service",
 service.wait_for_deployment(show_output = True)
 ```
 
-The first run should take around 10 minutes, as again, the Docker image needs to be build.
+The first deployment should take around 8 minutes, as before, the Docker image needs to be build.
 
 In our Workspace, we can check the `Images` tab:
 
@@ -147,7 +148,7 @@ https://bootcamps.blob.core.windows.net/ml-test-images/9.png
 
 At this point:
 
-* We put our high-accuracy model and deploy it on Azure Container Instances as a web service
-* We can do a simple RESTful API call to our endpoint for scoring a 28x28 pixel sized image
+* We took our high-accuracy model from challenge 2 and deployed it on Azure Container Instances as a web service
+* We can do simple RESTful API calls to our endpoint for scoring 28x28 pixel sized images
 
-Often, we have simpler data set and want to figure out how we can best classify or predict certain data points - without trying out a lot of Machine Learning algorithms ourselves. Hence, we'll look at Automated Machine Learning in the [last challenge](challenge_04.md).
+Often, we have a simpler data set and want to figure out how we can best classify or predict certain data points - without trying out a lot of Machine Learning algorithms ourselves. Hence, we'll look at Automated Machine Learning in the [fourth challenge](challenge_04.md).

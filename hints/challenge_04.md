@@ -1,6 +1,6 @@
 # Hints for Challenge 4
 
-By now, we have a good understanding how Azure Machine Learning works. In this last challenge, we'll take a data set and use Automated Machine Learning for testing out different regression algorithms automatically.
+By now, we have a good understanding how Azure Machine Learning works. In this last challenge, we'll take a data set and use Automated Machine Learning for testing out different regression algorithms automatically. Automated Machine Learning is currently able to perform `classification`, `regression` and also `forecasting`.
 
 For this challenge, we'll be using the [Boston house prices dataset](http://scikit-learn.org/stable/datasets/index.html#boston-dataset).
 
@@ -46,7 +46,7 @@ Now, we need to configure our Automated Machine Learning project:
 
 ```python
 automl_config = AutoMLConfig(task = 'regression',
-                             max_time_sec = 120,
+                             iteration_timeout_minutes = 2,
                              iterations = 10,
                              primary_metric = 'normalized_root_mean_squared_error',
                              n_cross_validations = 5,
@@ -61,7 +61,7 @@ This is the most interesting part:
 
 * `task` - Type of problem (classification or regression)
 * `primary_metric` - The metric that we want to optimize
-* `max_time_sec` - Time limit per iteration
+* `iteration_timeout_minutes` - Time limit per iteration
 * `iterations` - Number of iterations (number of algorithms tested)
 * `n_cross_validations` - Number of cross validation splits
 * `X` - Training data
@@ -70,20 +70,15 @@ This is the most interesting part:
 
 Depending on your task, there are [a lot more](https://docs.microsoft.com/en-us/python/api/azureml-train-automl/azureml.train.automl.automlconfig(class)?view=azure-ml-py) configuration parameters!
 
-Let's run it locally in our Notebook (not a smart idea for larger datasets):
+Let's run it locally in our Notebook, as the data isn't too big (depending on the complexity of our data, we would want to use Batch AI again):
 
 ```python
 local_run = experiment.submit(automl_config, show_output = True)
 ```
 
-We can summarize the results graphically:
+![alt text](../images/04-test_iterations.png "Test iterations")
 
-```python
-from azureml.train.widgets import RunDetails
-RunDetails(local_run).show()
-```
-
-And also retrieve the best performing model:
+Once done, we can retrieve the best performing model (in this case, it is a [Pipeline](https://docs.microsoft.com/en-us/azure/machine-learning/service/concept-ml-pipelines)):
 
 ```python
 best_run, fitted_model = local_run.get_output()
@@ -91,14 +86,31 @@ print("Best run:", best_run)
 print("Best model:", fitted_model)
 ```
 
-From here on, we can perform the same steps are before:
+We can use the best model/pipeline, to score our test data and calculate our accuracy:
 
-1. Register the model
-1. Containerize it
-1. Deploy it to a production target of our choice
+```python
+y_pred = fitted_model.predict(X_test)
+
+sum_actuals = sum_errors = 0
+for actual_val, predict_val in zip(y_test, y_pred):
+    abs_error = actual_val - predict_val
+    if abs_error < 0:
+        abs_error = abs_error * -1
+
+    sum_errors = sum_errors + abs_error
+    sum_actuals = sum_actuals + actual_val
+
+mean_abs_percent_error = sum_errors / sum_actuals
+print("Model MAPE", mean_abs_percent_error)
+print("Model Accuracy", 1 - mean_abs_percent_error)
+```
+
+From here, we can have a look at the [following examples](https://github.com/Azure/MachineLearningNotebooks/tree/master/how-to-use-azureml/automated-machine-learning) to see how we can save and deploy the model.
 
 At this point:
 
-* We took the `Boston house prices dataset` and split it up into a train and test set (we haven't used the test set in our code though!)
+* We took the `Boston house prices dataset` and split it up into a train and test set
 * We let Automated Machine Learning evaluate 10 algorithms to predict the house prices in Boston
-* We picked the best performing model
+* We picked the best performing model and ran it against the test dataset to get a final accuracy
+* There are a [lot more possibilities](https://docs.microsoft.com/en-us/azure/machine-learning/service/how-to-configure-auto-train) with Automated Machine Learning, especially `Forecasting` is also supported
+* A lot more example notebooks for Azure Machine Learning can be found [here on GitHub](https://github.com/Azure/MachineLearningNotebooks)

@@ -2,11 +2,13 @@
 
 ## Setup part
 
-In the Azure Portal, create a new `Machine Learning service workspace (preview)` Service:
+In the Azure Portal, create a new `Machine Learning service workspace` resource:
+
+![alt text](../images/01-aml_workspace.png "Azure Machine Learning Workspace")
 
 * Workspace name: `azure-ml-bootcamp`
 * Resource Group: `azure-ml-bootcamp`
-* Location: `West Europe` (but does not really matter)
+* Location: `East US` (`West Europe` does not always work with the `Free Trial` subscription)
 
 ![alt text](../images/01-create_workspace.png "Create Machine Learning Workspace")
 
@@ -15,16 +17,49 @@ Let's have a look at our Resource Group:
 ![alt text](../images/01-resource_group.png "Our resource group")
 
 * Application Insights - used for monitoring our models in production
-* Storage account - this will store our logs, model outputs, etc.
+* Storage account - this will store our logs, model outputs, training/testing data, etc.
 * Key vault - stores our secrets
 * Container registry - stores our containerized models
 * Machine Learning service workspace - the centre point for Machine Learning on Azure
 
-Create a free account on [Azure Notebooks](https://notebooks.azure.com). Then, create a new notebook (no need to make it `Public`):
+# Creating a Data Science VM
 
-![alt text](../images/01-create_notebook.png "Our new Azure Notebook for our code")
+First, create a new `Data Science Virtual Machine - Windows 2016`:
 
-Inside the newly created Azure Notebook, create a `config.json` and replace the values with your own (you'll find your Subscription ID in the Azure Portal at the top of your Resource Group):
+![alt text](../images/01-create_dsvm.png "Data Science Virtual Machine")
+
+In case you see two versions, pick the one with the following description:
+
+![alt text](../images/01-correct_dsvm.png "Data Science Virtual Machine")
+
+We can keep all the defaults, we just need to make sure that it is also in `East US`:
+
+![alt text](../images/01-create_dsvm2.png "Data Science Virtual Machine")
+
+(Configuration of auto-shutdown might also be a good idea - I know that some of you won't shut this down after the workshop...:satisfied::wink:)
+
+In a real-world setup, we would probably want to use a GPU-enabled instance, but for today we'll keep it simple (...and less expensive). Once the VM has started, connect to it via `RDP`.
+
+First, open up a command shell (`cmd.exe`) and quickly update the Azure Machine Learning SDK to the latest version:
+
+```
+conda activate AzureML
+pip install --upgrade azureml-sdk[notebooks,automl] azureml-dataprep
+```
+
+The `Data Science VM` is usually up-to-date, but since the `Azure Machine Learning Python SDK` is moving forward more quickly, let's make sure we run the latest version.
+
+Next, we'll start up our Jupyter Notebooks on the VM, we'll find the icon straight on the desktop:
+
+![alt text](../images/01-jupyter_icon.png "Jupyter")
+
+In command line, we can find the URL and the initial token for authentication. With the browser of your choice, open the address printed on the command line on log in. In some cases, IE opens automatically and will directly bring you into Jupyter.
+
+![alt text](../images/01-jupyter_starting.png "Jupyter Command Line")
+
+# Initial Azure Machine Learning Setup
+
+Inside the newly created Jupyter instance, first create a new folder via the `New` button on the top right of Jupyter. Everything we'll do in this workshop should happen in this folder. Next, create a text file called `config.json` (also via the `New` button) and replace the values with your own (you'll find your Subscription ID in the Azure Portal at the top of your Resource Group):
 
 ```json
 {
@@ -34,13 +69,13 @@ Inside the newly created Azure Notebook, create a `config.json` and replace the 
 }
 ```
 
-The `config.json` is used by the Azure Machine Learning SDK to connect to your ML workspace.
+The `config.json` is used by the `Azure Machine Learning SDK` to connect to your `Azure Machine Learning workspace` running in Azure.
 
-Download [`utils.py`](../utils.py) and upload it into your notebook.
+Download [`utils.py`](../utils.py) and upload it into your Jupyter instance (or click `New`, create an empty file called `utils.py` and copy/paste the content, but make sure to only copy the Python code). We'll need this file later for our Machine Learning example code.
 
-Finally, we can create a new Python Notebook where we'll run our code in:
+Finally, we can click the `New` button and create a new Notebook of type: `Python [conda env:AzureML]`. A new browser tab should open up and we can click the name `Untitled` and rename it to `challenge01.ipynb`.
 
-![alt text](../images/01-create_ipynb.png "Our new Python Notebook")
+![alt text](../images/01-create_notebook_file.png "Our new Azure Notebook for our code")
 
 ## Training a basic Machine Learning model
 
@@ -52,7 +87,17 @@ from azureml.core import Workspace, Experiment, Run
 ws = Workspace.from_config()
 ```
 
-You can run the cell by hitting `Run` or pressing `Shift+Enter`. This cell imports the relevant libraries from the Azure Machine Learning SDK, reads our `config.json` and connects the notebook to our Machine Learning Workspace in Azure.
+You can run the cell by hitting `Run` or pressing `Shift+Enter`. This cell imports the relevant libraries from the Azure Machine Learning SDK, reads our `config.json` and connects the notebook to our Machine Learning Workspace in Azure. You will need to authenticate to your Azure subscription (a browser window will open, but might not pop to the front - click the IE icon in the taskbar).
+
+***Note (when experiencing subscription ID errors):***
+
+If you are using multiple subscriptions, it might be required to tell the Jupyter Notebook, which one it should use. Hence, create a new cell and adapt the following code to use your subscription id (the one you have used in `config.json`):
+
+```
+!az account set -s "xxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxx"
+```
+
+Once you have ran the cell, restart the Notebook kernel (`Kernel` --> `Restart & Clear Output`) and wait a few seconds until it has restarted.
 
 Next, let's create a new experiment (this will later show up in our ML Workspace in Azure). This is where all our experiments will be logged to:
 
@@ -60,7 +105,7 @@ Next, let's create a new experiment (this will later show up in our ML Workspace
 experiment = Experiment(workspace = ws, name = "scikit-learn-mnist")
 ```
 
-Let's load some test data into our notebook. In a later challenge, we'll use Azure Batch AI to train a more powerful model, but for now, we'll train a model with the CPU that is running our notebook:
+Let's load some test data into our notebook. In a later challenge, we'll use Azure Batch AI to train a more powerful model, but for now, we'll train a model with the CPU of the VM that is running our notebook:
 
 ```python
 import os
@@ -109,7 +154,9 @@ run.log('accuracy', acc)
 run.complete()
 ```
 
-This code does the following things:
+On a `Ds3 v2 (4 vcpus, 14 GB memory)` instance, the code should take around 1-2 minutes to run.
+
+In summary, the code does the following things:
 
 1. It imports `sklearn` (Scikit-Learn) as the Machine Learning framework
 1. It loads our MNIST train and test data, and scales the values within `[0, 1]`
@@ -151,14 +198,14 @@ In the portal, we can see the output of our run:
 
 ![alt text](../images/01-run_model.png "Our model output in our ML Workspace")
 
-We can also query the metrics and outputs for our run:
+We can also query our logged metrics and outputs for our current run:
 
 ```python
 print("Run metrics:", run.get_metrics())
 print("Run model files", run.get_file_names())
 ```
 
-As a last step, we can register our model in our workspace:
+As a last step, we can register (version, tag, and store) our model in our workspace:
 
 ```python
 model = run.register_model(model_name='scikit-learn-mnist-model', model_path='outputs/scikit-learn-mnist.pkl')
@@ -175,9 +222,9 @@ Our model has been stored in the Storage Account that has been created initially
 
 At this point:
 
-* We've trained a Machine Learning model using Scikit-Learn inside our Azure Notebook
+* We've trained a Machine Learning model using Scikit-Learn inside our Jupyter Notebook (running in a Data Science VM on Azure)
 * We achieved `92%` accuracy (not very good for this data set)
-* Azure ML knows about our experiment and our initial run
+* Azure ML knows about our experiment and our initial run and results
 * Azure ML has the output files of our trained model in Blob storage
 * We have registered our initial model as a Azure ML Model in our Workspace
 
